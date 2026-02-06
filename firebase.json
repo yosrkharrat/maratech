@@ -1,0 +1,1 @@
+{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"storage":{"rules":"storage.rules"},"functions":{"source":"functions"},"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"maratech-a2850","configurations":{"android":"1:724978588214:android:807fdd023e2cb5e85b1697","ios":"1:724978588214:ios:c801e923b29ab8045b1697"}}}}}}

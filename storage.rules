@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper: Check authentication
+    function isAuth() {
+      return request.auth != null;
+    }
+    
+    // Helper: Check file size (max 10MB for photos, 50MB for videos)
+    function isValidPhotoSize() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+    
+    function isValidVideoSize() {
+      return request.resource.size < 50 * 1024 * 1024;
+    }
+    
+    // Helper: Check content type
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    function isVideo() {
+      return request.resource.contentType.matches('video/.*');
+    }
+    
+    // ── Event Media ──
+    match /events/{eventId}/photos/{fileName} {
+      allow read: if true;
+      allow create: if isAuth() && isImage() && isValidPhotoSize();
+      allow delete: if isAuth();
+    }
+    
+    match /events/{eventId}/videos/{fileName} {
+      allow read: if true;
+      allow create: if isAuth() && isVideo() && isValidVideoSize();
+      allow delete: if isAuth();
+    }
+    
+    match /events/{eventId}/thumbnails/{fileName} {
+      allow read: if true;
+      allow create: if isAuth() && isImage();
+      allow delete: if isAuth();
+    }
+    
+    // ── User Avatars ──
+    match /users/{userId}/avatar/{fileName} {
+      allow read: if true;
+      allow create, update: if isAuth() 
+        && request.auth.uid == userId 
+        && isImage() 
+        && isValidPhotoSize();
+      allow delete: if isAuth() && request.auth.uid == userId;
+    }
+    
+    // Deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

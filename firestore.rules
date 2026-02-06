@@ -1,0 +1,166 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ── Helper Functions ──
+    
+    // Check if the user is authenticated
+    function isAuth() {
+      return request.auth != null;
+    }
+    
+    // Get the current user's document
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Check if user has admin role
+    function isAdmin() {
+      return isAuth() && getUserDoc().role in ['admin_principal', 'admin_coach', 'admin_groupe'];
+    }
+    
+    // Check if user is the principal admin
+    function isPrincipalAdmin() {
+      return isAuth() && getUserDoc().role == 'admin_principal';
+    }
+    
+    // Check if user is a coach admin
+    function isCoachOrAbove() {
+      return isAuth() && getUserDoc().role in ['admin_principal', 'admin_coach'];
+    }
+    
+    // Validate string field
+    function isValidString(field, maxLen) {
+      return field is string && field.size() > 0 && field.size() <= maxLen;
+    }
+    
+    // ── Users Collection ──
+    match /users/{userId} {
+      // Anyone can read user profiles (for display names, etc.)
+      allow read: if true;
+      
+      // Only the user themselves can update their own non-sensitive fields
+      // Admins can update any user
+      allow update: if isAuth() && (
+        // User updating their own profile (restricted fields)
+        (request.auth.uid == userId 
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isActive'])
+        )
+        // Or admin updating any profile
+        || isAdmin()
+      );
+      
+      // Only admins can create or delete users
+      allow create: if isAdmin();
+      allow delete: if isPrincipalAdmin();
+    }
+    
+    // ── Groups Collection ──
+    match /groups/{groupId} {
+      // Anyone can read groups
+      allow read: if true;
+      
+      // Only coaches or above can create/update groups
+      allow create, update: if isCoachOrAbove();
+      
+      // Only principal admin can delete groups
+      allow delete: if isPrincipalAdmin();
+    }
+    
+    // ── Events Collection ──
+    match /events/{eventId} {
+      // Anyone can read events (visitors too)
+      allow read: if true;
+      
+      // Only admins can create events
+      allow create: if isAdmin() && isValidString(request.resource.data.title, 200);
+      
+      // Admins can update events
+      // Regular users can only update participation fields
+      allow update: if isAuth() && (
+        isAdmin()
+        || (
+          // Users can only modify participantIds, interestedIds, and counts
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['participantIds', 'interestedIds', 'participantsCount', 'interestedCount', 'viewCount'])
+        )
+      );
+      
+      // Only admins can delete events
+      allow delete: if isAdmin();
+      
+      // ── Media Subcollection ──
+      match /media/{mediaId} {
+        // Anyone can view media
+        allow read: if true;
+        
+        // Authenticated users can upload media
+        allow create: if isAuth() 
+          && request.resource.data.uploadedBy == request.auth.uid;
+        
+        // Only the uploader or admins can update/delete media
+        allow update: if isAuth() && (
+          resource.data.uploadedBy == request.auth.uid || isAdmin()
+        );
+        allow delete: if isAuth() && (
+          resource.data.uploadedBy == request.auth.uid || isAdmin()
+        );
+      }
+      
+      // ── Notes Subcollection ──
+      match /notes/{noteId} {
+        allow read: if true;
+        allow create: if isAuth()
+          && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isAuth() && (
+          resource.data.authorId == request.auth.uid || isAdmin()
+        );
+      }
+      
+      // ── Comments Subcollection ──
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuth()
+          && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isAuth() && (
+          resource.data.authorId == request.auth.uid || isAdmin()
+        );
+      }
+      
+      // ── Classement Subcollection ──
+      match /classement/{entryId} {
+        allow read: if true;
+        // Only the system (via service) or admins can write classement
+        allow write: if isAuth();
+      }
+    }
+    
+    // ── Strava Tokens (Private) ──
+    match /strava_tokens/{userId} {
+      // Only the owner can read/write their tokens
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+    
+    // ── Programs Collection ──
+    match /programs/{programId} {
+      allow read: if true;
+      allow create, update: if isCoachOrAbove();
+      allow delete: if isAdmin();
+    }
+    
+    // ── FCM Tokens ──
+    match /fcm_tokens/{tokenId} {
+      allow read: if isAdmin();
+      allow create, update: if isAuth() 
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuth()
+        && resource.data.userId == request.auth.uid;
+    }
+    
+    // ── Deny all other access ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
