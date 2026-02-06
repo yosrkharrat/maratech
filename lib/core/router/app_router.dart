@@ -18,6 +18,7 @@ import '../../screens/admin/admin_dashboard_screen.dart';
 import '../../screens/admin/manage_users_screen.dart';
 import '../../screens/strava/strava_connect_screen.dart';
 import '../../screens/strava/classement_screen.dart';
+import '../../screens/posts/create_post_screen.dart';
 import '../../widgets/layout/main_scaffold.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -103,6 +104,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ],
               ),
             ],
+          ),
+
+          // Posts
+          GoRoute(
+            path: '/create-post',
+            name: 'create-post',
+            builder: (context, state) => const CreatePostScreen(),
           ),
 
           // Club
